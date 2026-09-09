@@ -4,7 +4,7 @@ Tags: activity log, audit log, ai, rest api, wp-cli
 Requires at least: 5.5
 Tested up to: 7.1
 Requires PHP: 7.2
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -85,6 +85,9 @@ The table is dropped and both of its options are deleted, on every site of a net
 1. The log: what each change arrived on, which application password authenticated it, what it touched and which fields. The same entries are readable over the REST API.
 
 == Changelog ==
+
+= 1.2.1 =
+* 1.2.0 recognised only half of Elementor's kit copy. Elementor saves the kit's post row as well as its settings when it mirrors the site name, and that save still produced a "Default Kit" row with no fields beside the option change. Both halves are now recognised for what they are.
 
 = 1.2.0 =
 * The site tagline (`blogdescription`) is recorded when it changes, beside the site name.
