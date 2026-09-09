@@ -211,7 +211,7 @@ class Digitizer_AI_Agent_Log_Hooks {
 		if ( ! $post ) {
 			return;
 		}
-		if ( self::is_kit_mirror_of_option( $post ) ) {
+		if ( self::is_kit_mirror_of_option( $post, $meta_key ) ) {
 			return;
 		}
 		$type = ( 'attachment' === $post->post_type ) ? 'attachment' : 'post';
@@ -252,25 +252,36 @@ class Digitizer_AI_Agent_Log_Hooks {
 	 * distinguish them is *when* each happened. The copy runs inside the
 	 * update_option_{$option} action and nowhere else, and doing_action()
 	 * (wp-includes/plugin.php) answers exactly that question from core's own
-	 * filter stack. Nothing an agent asks for runs from inside a core option
-	 * action; whatever writes the active kit from there is a reaction to the
-	 * rename, so no narrower test on which key or column was written is
-	 * needed, and none would survive Elementor changing how it saves. The
-	 * deliberate edit runs outside the action and is recorded like any other.
-	 * Elementor's own guard goes the other way -
+	 * filter stack. The deliberate edit runs outside the action and is
+	 * recorded like any other. Elementor's own guard goes the other way -
 	 * update_kit_settings_based_on_option() returns early while the kit
 	 * is_saving() - so a kit save can never be the thing that is skipped
 	 * here.
 	 *
-	 * Only the active kit: it is the one post Elementor mirrors into, and
-	 * another plugin writing some other post from inside the same option
-	 * action is that plugin's action, not this echo.
+	 * Only the mirror's own two writes: the kit's post row, and the one
+	 * meta key it writes. Another plugin hooked on the same option action
+	 * that writes some other key on the kit - or any key on any other post
+	 * - is that plugin's side effect, which this log keeps as it keeps every
+	 * other (see the readme: nothing is filtered by default, and an entry
+	 * for a plugin rewriting its own data is true, only uninteresting). And
+	 * only the active kit, the one post Elementor mirrors into.
 	 *
-	 * @param object $post The post written.
+	 * Core has already written the option by the time this is asked:
+	 * update_option() (wp-includes/option.php) updates the row, returns
+	 * false on failure, and only then fires update_option_{$option} followed
+	 * at once by updated_option. So a write skipped here is never left with
+	 * no option row beside it.
+	 *
+	 * @param object      $post     The post written.
+	 * @param string|null $meta_key The meta key, when the write is a meta
+	 *                              write; null for the post row itself.
 	 * @return bool
 	 */
-	private static function is_kit_mirror_of_option( $post ) {
+	private static function is_kit_mirror_of_option( $post, $meta_key = null ) {
 		if ( ! is_object( $post ) || ! isset( $post->post_type ) || 'elementor_library' !== $post->post_type ) {
+			return false;
+		}
+		if ( null !== $meta_key && '_elementor_page_settings' !== $meta_key ) {
 			return false;
 		}
 		$inside = false;

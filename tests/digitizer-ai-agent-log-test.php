@@ -722,16 +722,15 @@ $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
 
-// Which key or column the kit is written on is not part of the test:
-// nothing an agent asks for runs from inside a core option action, so
-// whatever Elementor writes to the active kit from there is its reaction
-// to the rename, however it chooses to save.
+// Only the mirror's own two writes. Some other plugin hooked on the same
+// option action that writes a different key on the kit is that plugin's
+// side effect, kept like every other.
 $GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
 Digitizer_AI_Agent_Log_Buffer::reset();
 Digitizer_AI_Agent_Log_Hooks::on_post_meta( 207, 5, '_elementor_data' );
 $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'any write to the active kit from inside the action is the mirror' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a different meta key on the kit, even inside the action, is kept' );
 
 // The same kit save outside the action is a save like any other.
 Digitizer_AI_Agent_Log_Buffer::reset();
