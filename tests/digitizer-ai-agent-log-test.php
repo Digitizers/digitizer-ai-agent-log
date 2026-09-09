@@ -438,6 +438,60 @@ $names = array_column( $rows, 'object_name' );
 aial_test_eq( count( $rows ), 2, 'two options updated in one request are two rows' );
 aial_test_ok( in_array( 'siteurl', $names, true ) && in_array( 'blogname', $names, true ), 'one per option name' );
 
+/* ---- another plugin's copy of an option change is not a second row ---- */
+
+// Elementor mirrors blogname and blogdescription into the active kit
+// (core/kits/manager.php, on update_option_blogname), and that hook fires
+// before updated_option - so the kit's meta write reaches the buffer ahead
+// of the option row it was caused by. One agent action, one row.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
+aial_test_eq( count( $rows ), 1, 'a kit resave that only mirrors a renamed site is folded into the option row' );
+aial_test_eq( $rows[0]['object_name'], 'blogname', 'and the option row is the one kept' );
+
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogdescription', array( 'blogdescription' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'the tagline mirrors the same way' );
+
+// Without the option in the same request the same meta write is an agent
+// editing Site Settings through Elementor - a real action, kept.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 ) ), 1, 'a kit settings write on its own is an action and stays' );
+
+// A kit save that changed more than the mirrored settings is more than an
+// echo, so it stays beside the option row.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings', 'post_title' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit save that also changed the post is kept' );
+
+// Only the two options Elementor mirrors count. Any other option beside a
+// kit write is a coincidence of the same request, not its cause.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'siteurl', array( 'siteurl' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'an unrelated option beside a kit write folds nothing' );
+
+// And the same post type with the same field is not a kit echo when the
+// post was created or deleted, whatever else the request did.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 9, 'created', 'New Kit', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit created in the same request is not an echo' );
+
+// The option has to be pending for the same site. A network run that
+// renamed site 1 and touched site 2's kit did two different things.
+Digitizer_AI_Agent_Log_Buffer::reset();
+$GLOBALS['aial_stub_current_blog'] = 2;
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+$GLOBALS['aial_stub_current_blog'] = 1;
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'an option renamed on another site folds nothing here' );
+
 /* ---- state-change actions outrank a later update, same as create/delete ---- */
 
 Digitizer_AI_Agent_Log_Buffer::reset();
@@ -555,6 +609,10 @@ $GLOBALS['aial_stub_filters'] = array();
 $watched = Digitizer_AI_Agent_Log_Hooks::watched_options();
 aial_test_ok( in_array( 'siteurl', $watched, true ), 'siteurl is watched' );
 aial_test_ok( in_array( 'active_plugins', $watched, true ), 'and so is active_plugins' );
+// The tagline sits beside the site name: both are site identity, and both
+// are what Elementor mirrors into its kit - the fold in Buffer::rows() needs
+// the cause on the record for the tagline case just as for the name.
+aial_test_ok( in_array( 'blogdescription', $watched, true ), 'and the tagline, beside the site name' );
 // updated_option fires for every transient. Without an allowlist the table
 // fills with noise in a day and buries the writes worth seeing.
 aial_test_ok( ! in_array( '_transient_doing_cron', $watched, true ), 'a transient is not' );

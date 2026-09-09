@@ -85,6 +85,7 @@ class Digitizer_AI_Agent_Log_Hooks {
 			'siteurl',
 			'home',
 			'blogname',
+			'blogdescription',
 			'users_can_register',
 			'default_role',
 			'permalink_structure',

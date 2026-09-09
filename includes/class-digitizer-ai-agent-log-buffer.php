@@ -140,6 +140,9 @@ class Digitizer_AI_Agent_Log_Buffer {
 	public static function rows( $channel, $app, $user_id, $now ) {
 		$rows = array();
 		foreach ( self::$pending as $entry ) {
+			if ( self::is_option_echo( $entry ) ) {
+				continue;
+			}
 			$entry['logged_at'] = gmdate( 'Y-m-d H:i:s', (int) $now );
 			$entry['channel']   = (string) $channel;
 			$entry['app']       = (string) $app;
@@ -149,6 +152,57 @@ class Digitizer_AI_Agent_Log_Buffer {
 			$rows[]             = $entry;
 		}
 		return $rows;
+	}
+
+	/**
+	 * The site-identity options another plugin copies into an object of its
+	 * own, and the object it copies them into.
+	 *
+	 * Elementor mirrors the site name and tagline into the active kit's
+	 * settings (elementor/core/kits/manager.php, on update_option_blogname
+	 * and update_option_blogdescription), so an agent that renames the site
+	 * also, through Elementor, updates the kit's _elementor_page_settings
+	 * meta. That is a real write and the listener sees it as one - but it is
+	 * Elementor's reaction, not the agent's action, and a row for it says
+	 * nothing the option row does not already say. Worse, core fires
+	 * update_option_{$option} before updated_option, so the reaction reaches
+	 * the buffer ahead of its cause and the log reads effect-then-cause.
+	 *
+	 * @var array
+	 */
+	private static $echoed_options = array( 'blogname', 'blogdescription' );
+
+	/**
+	 * Whether an entry is only another plugin's copy of an option change
+	 * that this same request also recorded.
+	 *
+	 * Narrow on purpose. The entry has to be an update of an elementor_library
+	 * post whose only touched field is _elementor_page_settings, and one of
+	 * the options that Elementor mirrors has to be pending for the same site.
+	 * An agent editing Site Settings through Elementor's own API touches the
+	 * same meta but records no option, so it is kept; a kit save that also
+	 * changed the post itself carries more than one field, so it is kept
+	 * too. Decided here at flush rather than in the listener because the
+	 * option row arrives after the kit row, and only the finished buffer
+	 * knows whether it arrived at all.
+	 *
+	 * @param array $entry A pending entry.
+	 * @return bool
+	 */
+	private static function is_option_echo( $entry ) {
+		if ( 'post' !== $entry['object_type'] || 'elementor_library' !== $entry['object_subtype'] || 'updated' !== $entry['action'] ) {
+			return false;
+		}
+		if ( array( '_elementor_page_settings' ) !== array_keys( $entry['fields'] ) ) {
+			return false;
+		}
+		foreach ( self::$echoed_options as $option ) {
+			$key = $entry['blog_id'] . ':option:' . $option;
+			if ( isset( self::$pending[ $key ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
