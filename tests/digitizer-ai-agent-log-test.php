@@ -670,13 +670,20 @@ foreach ( array( 'post_title', 'rank_math_title', '_elementor_data', 'custom_fie
 $GLOBALS['aial_stub_posts'][5]                          = array( 'post_type' => 'elementor_library', 'post_title' => 'Default Kit' );
 $GLOBALS['aial_stub_posts'][77]                         = array( 'post_type' => 'elementor_library', 'post_title' => 'Header' );
 $GLOBALS['aial_stub_options']['elementor_active_kit']  = 5;
+// The mirror is two writes: Elementor's page settings manager runs
+// wp_update_post() on the kit (a save with no field of its own - the
+// modified date moves) and then writes the meta. Seen on staging as a
+// "Default Kit []" row when only the meta was recognised.
+$kit = (object) array( 'ID' => 5, 'post_type' => 'elementor_library', 'post_title' => 'Default Kit', 'post_status' => 'publish', 'post_modified' => '2026-09-09 14:00:00' );
+$kit_before = (object) array( 'ID' => 5, 'post_type' => 'elementor_library', 'post_title' => 'Default Kit', 'post_status' => 'publish', 'post_modified' => '2026-09-01 00:00:00' );
 $GLOBALS['aial_stub_doing_actions']                     = array( 'update_option_blogname' );
 Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_saved( 5, $kit, true, $kit_before );
 Digitizer_AI_Agent_Log_Hooks::on_post_meta( 201, 5, '_elementor_page_settings' );
 $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
 $rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
-aial_test_eq( count( $rows ), 1, 'the kit copy made inside update_option_blogname is not recorded' );
+aial_test_eq( count( $rows ), 1, 'neither half of the kit copy made inside update_option_blogname is recorded' );
 aial_test_eq( $rows[0]['object_name'], 'blogname', 'and the option row is what remains' );
 
 $GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogdescription' );
@@ -709,19 +716,27 @@ aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1
 // inside the same action is some other plugin's doing, kept.
 $GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
 Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_saved( 77, (object) array( 'ID' => 77, 'post_type' => 'elementor_library', 'post_title' => 'Header' ), true, null );
 Digitizer_AI_Agent_Log_Hooks::on_post_meta( 206, 77, '_elementor_page_settings' );
 $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
 
-// Any other meta on the kit from inside the action is not the mirror
-// either - the mirror writes exactly one key.
+// Which key or column the kit is written on is not part of the test:
+// nothing an agent asks for runs from inside a core option action, so
+// whatever Elementor writes to the active kit from there is its reaction
+// to the rename, however it chooses to save.
 $GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
 Digitizer_AI_Agent_Log_Buffer::reset();
 Digitizer_AI_Agent_Log_Hooks::on_post_meta( 207, 5, '_elementor_data' );
 $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a different meta key on the kit is kept' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'any write to the active kit from inside the action is the mirror' );
+
+// The same kit save outside the action is a save like any other.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_saved( 5, $kit, true, $kit_before );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 ) ), 1, 'the kit post row saved on its own is recorded' );
 
 // Only the two options Elementor mirrors count.
 $GLOBALS['aial_stub_doing_actions'] = array( 'update_option_siteurl' );
