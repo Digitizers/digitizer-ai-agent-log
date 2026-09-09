@@ -59,6 +59,21 @@ class Digitizer_AI_Agent_Log_Hooks {
 		add_action( 'deactivated_plugin', array( __CLASS__, 'on_plugin_deactivated' ) );
 		add_action( 'switch_theme', array( __CLASS__, 'on_theme_switched' ), 10, 2 );
 		add_action( 'updated_option', array( __CLASS__, 'on_option_updated' ) );
+		// The two options whose kit mirror is skipped below are also recorded
+		// from their own update_option_{$option} action, ahead of every other
+		// callback on it. Core fires that action after the row is written and
+		// updated_option only once every callback on it has returned - so a
+		// callback that aborts the request (Elementor's mirror itself, or
+		// another plugin's) would leave the option changed, its mirror
+		// skipped, and no row at all. Recording first means the option row
+		// exists before anything can be skipped on its account; the buffer
+		// keys on the option name, so the row is the same one updated_option
+		// would have written. First on purpose, and PHP_INT_MIN rather than a
+		// low number: this is not a policy another site should be able to
+		// run before, it is the record of a write that has already happened.
+		foreach ( self::$kit_mirrored_options as $option ) {
+			add_action( 'update_option_' . $option, array( __CLASS__, 'on_mirrored_option_updated' ), PHP_INT_MIN, 3 );
+		}
 
 		// Late on purpose, and for the same reason the update policy hooks
 		// allow_major_auto_core_updates at 9999: the answer that runs last is
@@ -274,9 +289,11 @@ class Digitizer_AI_Agent_Log_Hooks {
 	 *
 	 * Core has already written the option by the time this is asked:
 	 * update_option() (wp-includes/option.php) updates the row, returns
-	 * false on failure, and only then fires update_option_{$option} followed
-	 * at once by updated_option. So a write skipped here is never left with
-	 * no option row beside it.
+	 * false on failure, and only then fires update_option_{$option} - on
+	 * which init() records the option first, ahead of the mirror - and then
+	 * updated_option. So a write skipped here is never left with no option
+	 * row beside it, even when a later callback on the action aborts the
+	 * request before updated_option is reached.
 	 *
 	 * @param object      $post     The post written.
 	 * @param string|null $meta_key The meta key, when the write is a meta
@@ -376,6 +393,15 @@ class Digitizer_AI_Agent_Log_Hooks {
 			return;
 		}
 		Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', (string) $option, array( (string) $option ) );
+	}
+
+	/**
+	 * update_option_{$option} passes ( $old_value, $value, $option ); the
+	 * option name is third. See init() for why these two are recorded here
+	 * as well as on updated_option.
+	 */
+	public static function on_mirrored_option_updated( $old_value, $value, $option ) {
+		self::on_option_updated( $option );
 	}
 
 	/**

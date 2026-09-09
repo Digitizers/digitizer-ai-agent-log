@@ -758,6 +758,27 @@ $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'siteurl' );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit write inside some other option action is kept' );
 
+// The option is recorded from its own update_option_{$option} action too,
+// first on it, so a callback after ours that aborts the request (before
+// updated_option) leaves the option row in the buffer beside nothing
+// skipped on its account. Same buffer key, so no second row when
+// updated_option does arrive.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_mirrored_option_updated( 'Old', 'New', 'blogname' );
+Digitizer_AI_Agent_Log_Hooks::on_post_saved( 5, $kit, true, $kit_before );
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 210, 5, '_elementor_page_settings' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
+aial_test_eq( count( $rows ), 1, 'the option row is in the buffer before the mirror is skipped, without waiting for updated_option' );
+aial_test_eq( $rows[0]['object_name'], 'blogname', 'and it is the option' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'updated_option arriving afterwards adds no second row' );
+
+$GLOBALS['aial_stub_filters'] = array();
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Buffer::reset();
+
 // And a site with no active kit on record - Elementor absent, or never
 // set one up - skips nothing.
 unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
@@ -954,6 +975,11 @@ $GLOBALS['aial_stub_filters'] = array();
 $_SERVER['REQUEST_METHOD']   = 'POST';
 Digitizer_AI_Agent_Log_Hooks::init();
 aial_test_ok( ! empty( $GLOBALS['aial_stub_filters'] ), 'init() on a real write registers something' );
+foreach ( array( 'blogname', 'blogdescription' ) as $mirrored ) {
+	$reg = isset( $GLOBALS['aial_stub_filters'][ 'update_option_' . $mirrored ] ) ? $GLOBALS['aial_stub_filters'][ 'update_option_' . $mirrored ] : array();
+	aial_test_eq( count( $reg ), 1, "init() records $mirrored from its own update_option_ action as well" );
+	aial_test_eq( $reg[0]['priority'], PHP_INT_MIN, 'ahead of every other callback on it, so the option row exists before the kit mirror is skipped' );
+}
 
 // A cron run reached over GET - an external scheduler fetching wp-cron.php,
 // which is what most hosts do - must still register. It is a write channel
