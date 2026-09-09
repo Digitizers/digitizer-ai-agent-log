@@ -438,81 +438,6 @@ $names = array_column( $rows, 'object_name' );
 aial_test_eq( count( $rows ), 2, 'two options updated in one request are two rows' );
 aial_test_ok( in_array( 'siteurl', $names, true ) && in_array( 'blogname', $names, true ), 'one per option name' );
 
-/* ---- another plugin's copy of an option change is not a second row ---- */
-
-// Elementor mirrors blogname and blogdescription into the active kit
-// (core/kits/manager.php, on update_option_blogname), and that hook fires
-// before updated_option - so the kit's meta write reaches the buffer ahead
-// of the option row it was caused by. One agent action, one row.
-$GLOBALS['aial_stub_options']['elementor_active_kit'] = 5;
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
-aial_test_eq( count( $rows ), 1, 'a kit resave that only mirrors a renamed site is folded into the option row' );
-aial_test_eq( $rows[0]['object_name'], 'blogname', 'and the option row is the one kept' );
-
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogdescription', array( 'blogdescription' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'the tagline mirrors the same way' );
-
-// Without the option in the same request the same meta write is an agent
-// editing Site Settings through Elementor - a real action, kept.
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 ) ), 1, 'a kit settings write on its own is an action and stays' );
-
-// A kit save that changed more than the mirrored settings is more than an
-// echo, so it stays beside the option row.
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings', 'post_title' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit save that also changed the post is kept' );
-
-// Only the two options Elementor mirrors count. Any other option beside a
-// kit write is a coincidence of the same request, not its cause.
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'siteurl', array( 'siteurl' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'an unrelated option beside a kit write folds nothing' );
-
-// And the same post type with the same field is not a kit echo when the
-// post was created or deleted, whatever else the request did.
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 9, 'created', 'New Kit', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit created in the same request is not an echo' );
-
-// Only the active kit is mirrored into. Any other Elementor template
-// carrying the same meta in the same request as a rename is a second
-// action - a header edited while the site was renamed - and is kept.
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 77, 'updated', 'Header', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
-
-// And a site with no active kit at all - Elementor absent, or never set
-// one up - has nothing to fold, whatever the template write looks like.
-unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
-Digitizer_AI_Agent_Log_Buffer::reset();
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'with no active kit on record nothing is folded' );
-$GLOBALS['aial_stub_options']['elementor_active_kit'] = 5;
-
-// The option has to be pending for the same site. A network run that
-// renamed site 1 and touched site 2's kit did two different things. The
-// kit id is read while site 2 is current, which is the only time it is
-// the right site's answer.
-Digitizer_AI_Agent_Log_Buffer::reset();
-$GLOBALS['aial_stub_current_blog'] = 2;
-Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
-$GLOBALS['aial_stub_current_blog'] = 1;
-Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
-aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'an option renamed on another site folds nothing here' );
-unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
-
 /* ---- state-change actions outrank a later update, same as create/delete ---- */
 
 Digitizer_AI_Agent_Log_Buffer::reset();
@@ -734,6 +659,89 @@ aial_test_eq( count( $rows[0]['fields'] ), 4, 'carrying all four field names' );
 foreach ( array( 'post_title', 'rank_math_title', '_elementor_data', 'custom_field' ) as $expected_field ) {
 	aial_test_ok( in_array( $expected_field, $rows[0]['fields'], true ), "including {$expected_field}" );
 }
+
+/* ---- Elementor's copy of a renamed site into its kit is not a row ---- */
+
+// Elementor mirrors blogname and blogdescription into the active kit
+// (core/kits/manager.php, on update_option_blogname), one update_meta of
+// _elementor_page_settings from inside that action - which core fires before
+// updated_option, so the copy would otherwise land ahead of the option row
+// it was caused by. One agent action, one row.
+$GLOBALS['aial_stub_posts'][5]                          = array( 'post_type' => 'elementor_library', 'post_title' => 'Default Kit' );
+$GLOBALS['aial_stub_posts'][77]                         = array( 'post_type' => 'elementor_library', 'post_title' => 'Header' );
+$GLOBALS['aial_stub_options']['elementor_active_kit']  = 5;
+$GLOBALS['aial_stub_doing_actions']                     = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 201, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
+aial_test_eq( count( $rows ), 1, 'the kit copy made inside update_option_blogname is not recorded' );
+aial_test_eq( $rows[0]['object_name'], 'blogname', 'and the option row is what remains' );
+
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogdescription' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 202, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogdescription' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'the tagline mirrors the same way' );
+
+// The decision is made at the write, not from the request's final shape: an
+// agent that renames the site and also edits the kit on purpose makes two
+// writes to the same meta, which the buffer folds into one field - only the
+// timing tells them apart. The deliberate one happens outside the action.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 203, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 204, 5, '_elementor_page_settings' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 );
+aial_test_eq( count( $rows ), 2, 'a deliberate kit edit in the same request as the rename is kept' );
+
+// Outside the action the same write is an agent editing Site Settings
+// through Elementor - a real action, kept.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 205, 5, '_elementor_page_settings' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 ) ), 1, 'a kit settings write on its own is an action and stays' );
+
+// Only the active kit is mirrored into. Another template written from
+// inside the same action is some other plugin's doing, kept.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 206, 77, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
+
+// Any other meta on the kit from inside the action is not the mirror
+// either - the mirror writes exactly one key.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 207, 5, '_elementor_data' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a different meta key on the kit is kept' );
+
+// Only the two options Elementor mirrors count.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_siteurl' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 208, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'siteurl' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit write inside some other option action is kept' );
+
+// And a site with no active kit on record - Elementor absent, or never
+// set one up - skips nothing.
+unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 209, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'with no active kit on record nothing is skipped' );
+unset( $GLOBALS['aial_stub_posts'][5], $GLOBALS['aial_stub_posts'][77] );
+Digitizer_AI_Agent_Log_Buffer::reset();
 
 // 3. on_post_saved() is silent on a revision, and on an autosave - and test 1
 // above already proves the guard is not simply an always-return.
