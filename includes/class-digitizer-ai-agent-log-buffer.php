@@ -18,6 +18,9 @@ class Digitizer_AI_Agent_Log_Buffer {
 	/** @var array */
 	private static $pending = array();
 
+	/** @var array Active Elementor kit id per site, read when a template write is first recorded there. */
+	private static $active_kits = array();
+
 	/**
 	 * How strongly an action describes what happened to an object, when more
 	 * than one reached the buffer in one request. An update is a fact about
@@ -59,6 +62,17 @@ class Digitizer_AI_Agent_Log_Buffer {
 		// nothing to read; it is in the key there too, harmlessly, because a
 		// single site never produces a second value for it.
 		$blog = (int) get_current_blog_id();
+
+		// Which post is the active kit on the site this change happened on,
+		// read now while that site is the current one. rows() runs on
+		// 'shutdown' with whatever site the request restored, and reading the
+		// option there would answer for the wrong site on a network run. The
+		// option is autoloaded, so this is a cache hit, and it is only read
+		// for a template write at all. Elementor's own default is 0, so a
+		// site without a kit folds nothing.
+		if ( 'post' === $type && 'elementor_library' === $subtype && ! isset( self::$active_kits[ $blog ] ) ) {
+			self::$active_kits[ $blog ] = (int) get_option( 'elementor_active_kit', 0 );
+		}
 
 		// Objects with a real id are keyed on it. Plugins, themes and options
 		// pass id 0, so keying on id alone would collapse every plugin
@@ -119,7 +133,8 @@ class Digitizer_AI_Agent_Log_Buffer {
 	 * @return void
 	 */
 	public static function reset() {
-		self::$pending = array();
+		self::$pending     = array();
+		self::$active_kits = array();
 	}
 
 	/**
@@ -176,15 +191,17 @@ class Digitizer_AI_Agent_Log_Buffer {
 	 * Whether an entry is only another plugin's copy of an option change
 	 * that this same request also recorded.
 	 *
-	 * Narrow on purpose. The entry has to be an update of an elementor_library
-	 * post whose only touched field is _elementor_page_settings, and one of
-	 * the options that Elementor mirrors has to be pending for the same site.
+	 * Narrow on purpose. The entry has to be an update of the site's active
+	 * kit - the one post Elementor mirrors into, never any other template -
+	 * whose only touched field is _elementor_page_settings, and one of the
+	 * options that Elementor mirrors has to be pending for the same site.
 	 * An agent editing Site Settings through Elementor's own API touches the
 	 * same meta but records no option, so it is kept; a kit save that also
 	 * changed the post itself carries more than one field, so it is kept
-	 * too. Decided here at flush rather than in the listener because the
-	 * option row arrives after the kit row, and only the finished buffer
-	 * knows whether it arrived at all.
+	 * too; and a different template edited in the same request as a rename
+	 * is a second action, kept beside the first. Decided here at flush
+	 * rather than in the listener because the option row arrives after the
+	 * kit row, and only the finished buffer knows whether it arrived at all.
 	 *
 	 * @param array $entry A pending entry.
 	 * @return bool
@@ -194,6 +211,10 @@ class Digitizer_AI_Agent_Log_Buffer {
 			return false;
 		}
 		if ( array( '_elementor_page_settings' ) !== array_keys( $entry['fields'] ) ) {
+			return false;
+		}
+		$blog = (int) $entry['blog_id'];
+		if ( empty( self::$active_kits[ $blog ] ) || self::$active_kits[ $blog ] !== (int) $entry['object_id'] ) {
 			return false;
 		}
 		foreach ( self::$echoed_options as $option ) {

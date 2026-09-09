@@ -444,6 +444,7 @@ aial_test_ok( in_array( 'siteurl', $names, true ) && in_array( 'blogname', $name
 // (core/kits/manager.php, on update_option_blogname), and that hook fires
 // before updated_option - so the kit's meta write reaches the buffer ahead
 // of the option row it was caused by. One agent action, one row.
+$GLOBALS['aial_stub_options']['elementor_active_kit'] = 5;
 Digitizer_AI_Agent_Log_Buffer::reset();
 Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
 Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
@@ -483,14 +484,34 @@ Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 9, 'created'
 Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit created in the same request is not an echo' );
 
+// Only the active kit is mirrored into. Any other Elementor template
+// carrying the same meta in the same request as a rename is a second
+// action - a header edited while the site was renamed - and is kept.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 77, 'updated', 'Header', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
+
+// And a site with no active kit at all - Elementor absent, or never set
+// one up - has nothing to fold, whatever the template write looks like.
+unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
+Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'with no active kit on record nothing is folded' );
+$GLOBALS['aial_stub_options']['elementor_active_kit'] = 5;
+
 // The option has to be pending for the same site. A network run that
-// renamed site 1 and touched site 2's kit did two different things.
+// renamed site 1 and touched site 2's kit did two different things. The
+// kit id is read while site 2 is current, which is the only time it is
+// the right site's answer.
 Digitizer_AI_Agent_Log_Buffer::reset();
 $GLOBALS['aial_stub_current_blog'] = 2;
 Digitizer_AI_Agent_Log_Buffer::record( 'post', 'elementor_library', 5, 'updated', 'Default Kit', array( '_elementor_page_settings' ) );
 $GLOBALS['aial_stub_current_blog'] = 1;
 Digitizer_AI_Agent_Log_Buffer::record( 'option', '', 0, 'updated', 'blogname', array( 'blogname' ) );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'an option renamed on another site folds nothing here' );
+unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
 
 /* ---- state-change actions outrank a later update, same as create/delete ---- */
 
