@@ -4,7 +4,7 @@ Tags: activity log, audit log, ai, rest api, wp-cli
 Requires at least: 5.5
 Tested up to: 7.1
 Requires PHP: 7.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -85,6 +85,10 @@ The table is dropped and both of its options are deleted, on every site of a net
 1. The log: what each change arrived on, which application password authenticated it, what it touched and which fields. The same entries are readable over the REST API.
 
 == Changelog ==
+
+= 1.2.0 =
+* The site tagline (`blogdescription`) is recorded when it changes, beside the site name.
+* Elementor copies the site name and tagline into its active kit whenever they change. That copy no longer gets a row of its own next to the option change that caused it - one action, one row. A kit written on its own, or together with anything else, is recorded as before.
 
 = 1.1.0 =
 * A `digitizer_ai_agent_log_record` filter, applied to every entry once the channel and the application name are known, so a site can silence a writer it does not care about. Nothing is filtered by default.

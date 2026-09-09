@@ -555,6 +555,10 @@ $GLOBALS['aial_stub_filters'] = array();
 $watched = Digitizer_AI_Agent_Log_Hooks::watched_options();
 aial_test_ok( in_array( 'siteurl', $watched, true ), 'siteurl is watched' );
 aial_test_ok( in_array( 'active_plugins', $watched, true ), 'and so is active_plugins' );
+// The tagline sits beside the site name: both are site identity, and both
+// are what Elementor mirrors into its kit - the fold in Buffer::rows() needs
+// the cause on the record for the tagline case just as for the name.
+aial_test_ok( in_array( 'blogdescription', $watched, true ), 'and the tagline, beside the site name' );
 // updated_option fires for every transient. Without an allowlist the table
 // fills with noise in a day and buries the writes worth seeing.
 aial_test_ok( ! in_array( '_transient_doing_cron', $watched, true ), 'a transient is not' );
@@ -655,6 +659,89 @@ aial_test_eq( count( $rows[0]['fields'] ), 4, 'carrying all four field names' );
 foreach ( array( 'post_title', 'rank_math_title', '_elementor_data', 'custom_field' ) as $expected_field ) {
 	aial_test_ok( in_array( $expected_field, $rows[0]['fields'], true ), "including {$expected_field}" );
 }
+
+/* ---- Elementor's copy of a renamed site into its kit is not a row ---- */
+
+// Elementor mirrors blogname and blogdescription into the active kit
+// (core/kits/manager.php, on update_option_blogname), one update_meta of
+// _elementor_page_settings from inside that action - which core fires before
+// updated_option, so the copy would otherwise land ahead of the option row
+// it was caused by. One agent action, one row.
+$GLOBALS['aial_stub_posts'][5]                          = array( 'post_type' => 'elementor_library', 'post_title' => 'Default Kit' );
+$GLOBALS['aial_stub_posts'][77]                         = array( 'post_type' => 'elementor_library', 'post_title' => 'Header' );
+$GLOBALS['aial_stub_options']['elementor_active_kit']  = 5;
+$GLOBALS['aial_stub_doing_actions']                     = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 201, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
+aial_test_eq( count( $rows ), 1, 'the kit copy made inside update_option_blogname is not recorded' );
+aial_test_eq( $rows[0]['object_name'], 'blogname', 'and the option row is what remains' );
+
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogdescription' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 202, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogdescription' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 1, 'the tagline mirrors the same way' );
+
+// The decision is made at the write, not from the request's final shape: an
+// agent that renames the site and also edits the kit on purpose makes two
+// writes to the same meta, which the buffer folds into one field - only the
+// timing tells them apart. The deliberate one happens outside the action.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 203, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 204, 5, '_elementor_page_settings' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 );
+aial_test_eq( count( $rows ), 2, 'a deliberate kit edit in the same request as the rename is kept' );
+
+// Outside the action the same write is an agent editing Site Settings
+// through Elementor - a real action, kept.
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 205, 5, '_elementor_page_settings' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'rest', 'Studio', 5, 1756108800 ) ), 1, 'a kit settings write on its own is an action and stays' );
+
+// Only the active kit is mirrored into. Another template written from
+// inside the same action is some other plugin's doing, kept.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 206, 77, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a template that is not the active kit is kept beside the rename' );
+
+// Any other meta on the kit from inside the action is not the mirror
+// either - the mirror writes exactly one key.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 207, 5, '_elementor_data' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a different meta key on the kit is kept' );
+
+// Only the two options Elementor mirrors count.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_siteurl' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 208, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'siteurl' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a kit write inside some other option action is kept' );
+
+// And a site with no active kit on record - Elementor absent, or never
+// set one up - skips nothing.
+unset( $GLOBALS['aial_stub_options']['elementor_active_kit'] );
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+Digitizer_AI_Agent_Log_Hooks::on_post_meta( 209, 5, '_elementor_page_settings' );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'with no active kit on record nothing is skipped' );
+unset( $GLOBALS['aial_stub_posts'][5], $GLOBALS['aial_stub_posts'][77] );
+Digitizer_AI_Agent_Log_Buffer::reset();
 
 // 3. on_post_saved() is silent on a revision, and on an autosave - and test 1
 // above already proves the guard is not simply an always-return.
