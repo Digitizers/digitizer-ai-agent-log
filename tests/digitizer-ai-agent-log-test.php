@@ -732,6 +732,19 @@ $GLOBALS['aial_stub_doing_actions'] = array();
 Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
 aial_test_eq( count( Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 ) ), 2, 'a different meta key on the kit, even inside the action, is kept' );
 
+// A save inside the action that changes a real column of the kit is some
+// other callback's doing - Elementor's own mirror save changes none.
+$GLOBALS['aial_stub_doing_actions'] = array( 'update_option_blogname' );
+Digitizer_AI_Agent_Log_Buffer::reset();
+$kit_retitled = clone $kit;
+$kit_retitled->post_title = 'Renamed Kit';
+Digitizer_AI_Agent_Log_Hooks::on_post_saved( 5, $kit_retitled, true, $kit_before );
+$GLOBALS['aial_stub_doing_actions'] = array();
+Digitizer_AI_Agent_Log_Hooks::on_option_updated( 'blogname' );
+$rows = Digitizer_AI_Agent_Log_Buffer::rows( 'cli', '', 0, 1756108800 );
+aial_test_eq( count( $rows ), 2, 'a kit save inside the action that changes a column is kept' );
+aial_test_eq( $rows[0]['fields'], array( 'post_title' ), 'with the column it changed' );
+
 // The same kit save outside the action is a save like any other.
 Digitizer_AI_Agent_Log_Buffer::reset();
 Digitizer_AI_Agent_Log_Hooks::on_post_saved( 5, $kit, true, $kit_before );

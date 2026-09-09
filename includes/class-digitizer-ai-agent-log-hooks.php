@@ -160,7 +160,11 @@ class Digitizer_AI_Agent_Log_Hooks {
 		if ( self::is_revision_or_autosave( $post_id ) ) {
 			return;
 		}
-		if ( self::is_kit_mirror_of_option( $post ) ) {
+		$fields = self::post_field_diff( $post, $post_before );
+		if ( $update && empty( $fields ) && self::is_kit_mirror_of_option( $post ) ) {
+			// The mirror's wp_update_post() changes no column of the kit - it
+			// only moves the modified date. A save inside the same action that
+			// does change a column is some other callback's doing, kept.
 			return;
 		}
 		$type = ( isset( $post->post_type ) && 'attachment' === $post->post_type ) ? 'attachment' : 'post';
@@ -170,7 +174,7 @@ class Digitizer_AI_Agent_Log_Hooks {
 			$post_id,
 			$update ? 'updated' : 'created',
 			isset( $post->post_title ) ? $post->post_title : '',
-			self::post_field_diff( $post, $post_before )
+			$fields
 		);
 	}
 
@@ -258,13 +262,15 @@ class Digitizer_AI_Agent_Log_Hooks {
 	 * is_saving() - so a kit save can never be the thing that is skipped
 	 * here.
 	 *
-	 * Only the mirror's own two writes: the kit's post row, and the one
-	 * meta key it writes. Another plugin hooked on the same option action
-	 * that writes some other key on the kit - or any key on any other post
-	 * - is that plugin's side effect, which this log keeps as it keeps every
-	 * other (see the readme: nothing is filtered by default, and an entry
-	 * for a plugin rewriting its own data is true, only uninteresting). And
-	 * only the active kit, the one post Elementor mirrors into.
+	 * Only the mirror's own two writes: the kit's post row saved with no
+	 * column changed (on_post_saved() checks the diff), and the one meta key
+	 * it writes. Another plugin hooked on the same option action that
+	 * changes a real column of the kit, writes some other key on it, or
+	 * writes any other post, is that plugin's side effect, which this log
+	 * keeps as it keeps every other (see the readme: nothing is filtered by
+	 * default, and an entry for a plugin rewriting its own data is true,
+	 * only uninteresting). And only the active kit, the one post Elementor
+	 * mirrors into.
 	 *
 	 * Core has already written the option by the time this is asked:
 	 * update_option() (wp-includes/option.php) updates the row, returns
