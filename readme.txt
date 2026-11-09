@@ -42,6 +42,8 @@ On its own admin screen, filtered by channel, object type and date range. Or ove
 
 Each site keeps its own log, in its own table, and a run that switches between sites files each change under the site it happened on.
 
+Built and maintained by [Digitizer](https://www.digitizer.studio/), a WordPress studio.
+
 == Installation ==
 
 1. Install and activate. The log table is created the first time the plugin runs.
