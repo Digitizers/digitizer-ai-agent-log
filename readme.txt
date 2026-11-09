@@ -42,7 +42,7 @@ On its own admin screen, filtered by channel, object type and date range. Or ove
 
 Each site keeps its own log, in its own table, and a run that switches between sites files each change under the site it happened on.
 
-Built and maintained by [Digitizer](https://www.digitizer.co.il/), a WordPress studio.
+Built and maintained by [Digitizer](https://www.digitizer.co.il/digitizer-pro-tools/), a WordPress studio.
 
 == Installation ==
 

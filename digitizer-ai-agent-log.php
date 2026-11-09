@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Digitizer AI Agent Log
- * Plugin URI:        https://github.com/Digitizers/digitizer-ai-agent-log
+ * Plugin URI:        https://www.digitizer.co.il/digitizer-pro-tools/
  * Description:       Records what automations changed on this site - anything that arrived over the REST API, WP-Cron, WP-CLI or XML-RPC. A change made by a person in wp-admin is not recorded at all, so the log is what the agents did and nothing else.
  * Version:           1.2.1
  * Requires at least: 5.5
