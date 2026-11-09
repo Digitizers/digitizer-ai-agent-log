@@ -1,5 +1,5 @@
 === Digitizer AI Agent Log ===
-Contributors: benkalsky
+Contributors: digitizers, benkalsky
 Tags: activity log, audit log, ai, rest api, wp-cli
 Requires at least: 5.5
 Tested up to: 7.1
