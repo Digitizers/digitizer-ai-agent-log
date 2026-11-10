@@ -14,7 +14,7 @@ jobs:
     name: Update WordPress.org Assets
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # readme.txt already sits at the repo root, so no staging step is needed.
       - name: WordPress.org Plugin Assets Update
